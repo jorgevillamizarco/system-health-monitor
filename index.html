@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hermes System Monitor</title>
+<style>
+  :root {
+    --bg: #ffffff; --text: #171717; --text-secondary: #4d4d4d; --text-muted: #808080;
+    --green: #10b981; --red: #ef4444; --amber: #f59e0b; --blue: #0a72ef;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, sans-serif; background: #fafafa;
+    color: var(--text); line-height: 1.5; -webkit-font-smoothing: antialiased;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px 20px; }
+  header { padding: 12px 0; border-bottom: 1px solid rgba(0,0,0,0.08); margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; }
+  h1 { font-size: 20px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--bg); border-radius: 8px;
+    box-shadow: rgba(0,0,0,0.08) 0px 0px 0px 1px, rgba(0,0,0,0.04) 0px 2px 2px;
+    padding: 16px;
+  }
+  .card.full { grid-column: 1 / -1; }
+  .card h2 { font-size: 14px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+  .count { font-size: 11px; font-weight: 500; color: var(--text-muted); background: #ebf5ff; padding: 2px 8px; border-radius: 9999px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font-weight: 500; color: var(--text-secondary); padding: 6px 10px; border-bottom: 1px solid rgba(0,0,0,0.08); font-size: 11px; text-transform: uppercase; }
+  td { padding: 7px 10px; border-bottom: 1px solid rgba(0,0,0,0.04); }
+  tr:last-child td { border-bottom: none; }
+  .badge { font-size: 10px; font-weight: 500; padding: 2px 7px; border-radius: 9999px; }
+  .badge-online { background: #ecfdf5; color: #065f46; }
+  .badge-offline { background: #fef2f2; color: #991b1b; }
+  .badge-active { background: #ebf5ff; color: #1e40af; }
+  .badge-gray { background: #f3f4f6; color: #374151; }
+  .badge-done { background: #ecfdf5; color: #065f46; }
+  .badge-running { background: #dbeafe; color: #1e40af; font-weight: 600; }
+  .badge-blocked { background: #fffbeb; color: #92400e; }
+  .empty { text-align: center; padding: 32px; color: var(--text-muted); font-size: 13px; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+  .dot-green { background: var(--green); box-shadow: 0 0 0 3px rgba(16,185,129,0.15); }
+  .dot-red { background: var(--red); box-shadow: 0 0 0 3px rgba(239,68,68,0.15); }
+  .dot-amber { background: var(--amber); box-shadow: 0 0 0 3px rgba(245,158,11,0.15); }
+  .status-strip { display: flex; gap: 12px; margin-bottom: 10px; }
+  .stat { flex: 1; text-align: center; padding: 10px; border-radius: 6px; }
+  .stat-num { font-size: 22px; font-weight: 600; display: block; }
+  .stat-label { font-size: 11px; color: var(--text-muted); }
+  footer { text-align: center; padding: 24px; color: var(--text-muted); font-size: 12px; }
+  .refresh { font-size: 12px; color: var(--text-muted); }
+  .gateway-status { font-weight: 500; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1><span class="dot dot-green" id="dot"></span> Hermes System Monitor</h1>
+    <span class="refresh">Updated: <span id="updated">--</span></span>
+  </header>
+  <div class="grid">
+    <div class="card"><h2>Profiles <span class="count" id="pc">--</span></h2><div id="profiles"><div class="empty">Loading...</div></div></div>
+    <div class="card"><h2>MCP Servers <span class="count" id="mc">--</span></h2><div id="mcp"><div class="empty">Loading...</div></div></div>
+    <div class="card"><h2>Kanban Board</h2><div id="kanban"><div class="empty">Loading...</div></div></div>
+    <div class="card"><h2>Cron Jobs</h2><div id="cron"><div class="empty">Loading...</div></div></div>
+    <div class="card full"><h2>Recent Sessions</h2><div id="sessions"><div class="empty">Loading...</div></div></div>
+  </div>
+  <footer>system-health-monitor · polling 30s · <span class="gateway-status" id="gw">gateway: checking...</span></footer>
+</div>
+<script>
+const API = 'http://localhost:9092/api';
+async function get(path) {
+  try { const r = await fetch(API + path); return r.ok ? await r.json() : null; } catch { return null; }
+}
+async function load() {
+  document.getElementById('updated').textContent = new Date().toLocaleTimeString();
+  
+  const profiles = await get('/profiles');
+  if (profiles) {
+    document.getElementById('pc').textContent = profiles.count;
+    const pl = profiles.profiles || [];
+    let h = '<table><tr><th>Profile</th></tr>';
+    for (const p of pl.slice(0, 8)) {
+      h += `<tr><td style="font-weight:500"><span class="dot dot-green" style="width:6px;height:6px;margin-right:6px;"></span>${p.name}</td></tr>`;
+    }
+    document.getElementById('profiles').innerHTML = h + '</table>';
+  }
+  
+  const mcp = await get('/mcp');
+  if (mcp) {
+    const srv = mcp.servers || [];
+    let on = 0, h = '<table><tr><th>Server</th><th>Tools</th><th>Status</th></tr>';
+    for (const s of srv) {
+      const ok = s.status === 'enabled' || s.status === '✓';
+      if (ok) on++;
+      h += `<tr><td style="font-weight:500">${s.name}</td><td style="font-size:12px">${s.tools||'--'}</td>`;
+      h += `<td><span class="dot ${ok?'dot-green':'dot-red'}"></span> <span class="badge ${ok?'badge-online':'badge-offline'}">${s.status||s.tools||'--'}</span></td></tr>`;
+    }
+    document.getElementById('mcp').innerHTML = h + '</table>';
+    document.getElementById('mc').textContent = `${on}/${srv.length}`;
+    document.getElementById('dot').className = 'dot ' + (on === srv.length && srv.length > 0 ? 'dot-green' : 'dot-amber');
+  }
+  
+  const kb = await get('/kanban');
+  if (kb) {
+    const c = kb.counts || {};
+    let h = '<div class="status-strip">';
+    h += `<div class="stat" style="background:#f0fdf4"><span class="stat-num">${c.done||0}</span><span class="stat-label">Done</span></div>`;
+    h += `<div class="stat" style="background:#eff6ff"><span class="stat-num">${c.running||0}</span><span class="stat-label">Running</span></div>`;
+    h += `<div class="stat" style="background:#f3f4f6"><span class="stat-num">${c.todo||c.ready||0}</span><span class="stat-label">Todo</span></div>`;
+    if (c.blocked) h += `<div class="stat" style="background:#fffbeb"><span class="stat-num">${c.blocked}</span><span class="stat-label">Blocked</span></div>`;
+    h += '</div>';
+    const tasks = (kb.tasks||[]).slice(0, 6);
+    if (tasks.length) {
+      h += '<table><tr><th>Task ID</th><th>Status</th></tr>';
+      for (const t of tasks) {
+        h += `<tr><td style="font-size:12px;font-family:monospace">${t.id}</td><td><span class="badge badge-${t.status}">${t.status}</span></td></tr>`;
+      }
+      h += '</table>';
+    }
+    document.getElementById('kanban').innerHTML = h;
+  }
+  
+  const cron = await get('/cron');
+  if (cron) {
+    const jobs = cron.jobs || [];
+    let h = '<table><tr><th>Job</th><th>Schedule</th><th>Last Run</th></tr>';
+    for (const j of jobs.slice(0, 6)) {
+      h += `<tr><td style="font-weight:500;font-size:12px">${j.name||j.id||'--'}</td><td style="font-size:11px;font-family:monospace">${j.schedule||'--'}</td><td style="font-size:11px">${j['last run']||'--'}</td></tr>`;
+    }
+    document.getElementById('cron').innerHTML = h + '</table>' || '<div class="empty">No cron jobs</div>';
+  }
+  
+  const sessions = await get('/sessions');
+  if (sessions) {
+    const ss = sessions.sessions || [];
+    let h = '<table><tr><th>Session</th></tr>';
+    for (const s of ss.slice(0, 5)) h += `<tr><td style="font-size:13px">${s.text||'--'}</td></tr>`;
+    document.getElementById('sessions').innerHTML = h + '</table>';
+  }
+  
+  const health = await get('/health');
+  if (health) document.getElementById('gw').innerHTML = `gateway: <span style="color:var(--green)">online</span>`;
+  else document.getElementById('gw').innerHTML = `gateway: <span style="color:var(--red)">offline</span>`;
+}
+load();
+setInterval(load, 30000);
+</script>
+</body>
+</html>
