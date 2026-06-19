@@ -106,6 +106,43 @@ Other profiles:
 	}
 }
 
+func TestParseGatewaySystemdStatus(t *testing.T) {
+	input := []byte(`● hermes-gateway.service - Hermes Agent Gateway - Messaging Platform Integration
+     Loaded: loaded (/home/jorge/.config/systemd/user/hermes-gateway.service; enabled; preset: enabled)
+     Active: active (running) since Fri 2026-06-19 15:40:43 CEST; 51min ago
+   Main PID: 79780 (hermes)
+      Tasks: 53 (limit: 37399)
+
+✓ User gateway service is running
+✓ Systemd linger is enabled (service survives logout)
+`)
+
+	data, err := parseGateway(input)
+	if err != nil {
+		t.Fatalf("parseGateway returned error: %v", err)
+	}
+	if !data.Running || data.PID != 79780 {
+		t.Fatalf("expected running systemd gateway with pid 79780, got %+v", data)
+	}
+}
+
+func TestParseGatewayStoppedSystemdStatus(t *testing.T) {
+	input := []byte(`○ hermes-gateway.service - Hermes Agent Gateway - Messaging Platform Integration
+     Loaded: loaded (/home/jorge/.config/systemd/user/hermes-gateway.service; enabled; preset: enabled)
+     Active: inactive (dead) since Fri 2026-06-19 15:40:43 CEST; 51min ago
+
+✗ User gateway service is not running
+`)
+
+	data, err := parseGateway(input)
+	if err != nil {
+		t.Fatalf("parseGateway returned error: %v", err)
+	}
+	if data.Running {
+		t.Fatalf("expected stopped systemd gateway, got %+v", data)
+	}
+}
+
 func TestParseSystem(t *testing.T) {
 	freeOutput := []byte(`               total        used        free      shared  buff/cache   available
 Mem:            30Gi       7.3Gi       976Mi        19Mi        22Gi        23Gi

@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-var gatewayPIDPattern = regexp.MustCompile(`PID:\s*(\d+)`)
+var gatewayPIDPattern = regexp.MustCompile(`(?:PID:\s*|Main PID:\s*)(\d+)`)
 var gatewayProfilePattern = regexp.MustCompile(`^[✓●]\s+([\w-]+)\s+—\s+PID\s+(\d+)`)
 
 func CollectGateway(ctx context.Context, runner Runner) SectionResult[GatewayData] {
@@ -35,7 +35,7 @@ func parseGateway(output []byte) (GatewayData, error) {
 	}
 
 	result := GatewayData{
-		Running: strings.Contains(strings.ToLower(text), "gateway is running"),
+		Running: gatewayIsRunning(text),
 		Summary: firstLine(text),
 	}
 
@@ -55,6 +55,13 @@ func parseGateway(output []byte) (GatewayData, error) {
 	}
 
 	return result, nil
+}
+
+func gatewayIsRunning(text string) bool {
+	lower := strings.ToLower(text)
+	return strings.Contains(lower, "gateway is running") ||
+		strings.Contains(lower, "active: active (running)") ||
+		strings.Contains(lower, "user gateway service is running")
 }
 
 func firstLine(text string) string {
