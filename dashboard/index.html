@@ -323,9 +323,9 @@
       setText('connection-state', 'Connected');
     }
 
-    function schedule(ms) {
+    function schedule(ms, force = false) {
       clearTimeout(state.timer);
-      state.timer = setTimeout(fetchStatus, ms);
+      state.timer = setTimeout(() => fetchStatus(force), ms);
     }
 
     async function fetchStatus(force = false) {
@@ -347,8 +347,7 @@
         if (state.failures >= 3) {
           state.paused = true;
           setText('connection-state', 'Connection lost — retrying in 30s', 'subtle stale');
-          schedule(30000);
-          state.paused = false;
+          schedule(30000, true);
         } else {
           schedule(5000);
         }

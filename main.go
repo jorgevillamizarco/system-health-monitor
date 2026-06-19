@@ -164,6 +164,7 @@ func envOrDefault(key, fallback string) string {
 		return fallback
 	}
 	if _, err := strconv.Atoi(value); err != nil {
+		log.Printf("invalid %s=%q, using default %q", key, value, fallback)
 		return fallback
 	}
 	return value
